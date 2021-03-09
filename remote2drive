@@ -1,0 +1,92 @@
+#!/bin/bash
+#
+# Script is designed to run on Windows Subsystem for Linux, however any linux system will run it.
+# 'sudo umount -f /mnt/<my drive/location> will forceably unmount even if it says device is busy
+
+REMOTE="/mnt/aknaupp"
+DRIVE="/mnt/e"
+TARGET_DATA="Sequel II movies"
+TARGET_DATA_SUBDIR_PATH="fsl_groups/fslg_dnasc/compute"
+SSHFS_COMMAND="sshfs -o follow_symlinks aknaupp@ssh.rc.byu.edu:/fslhome/aknaupp /mnt/aknaupp" # command automatically run if no remote FS is mounted
+
+# assign (optional) user specified drive name to $DRIVE
+if [ $1 ]
+then
+  DRIVE="/mnt/$1"
+fi
+
+# verify that drive is reachable
+if [ -d $DRIVE ]
+then
+  printf "Prepared to download to external hard drive located at ${DRIVE}.\n"
+else
+  printf "\n\t## Nothing is mounted at ${DRIVE}, or the location does not exist. ##\n\n"
+  printf "The following mount locations exist.\n"
+  SUBDIRS=("$(ls -d /mnt/*)")
+  echo ${SUBDIRS[@]}
+  echo "WSL solution: Execute 'sudo mount -t drvfs e: /mnt/e' to mount external hard drive 'e:'. to linux subsystem."
+  exit 1
+fi
+
+# verify remote file location is mounted
+MOUNT_OUTPUT=$(mount | grep $REMOTE) # check whether $REMOTE is among mounted locations
+if [[ $MOUNT_OUTPUT ]]
+then
+  printf "Prepared to upload from remote file location via '${MOUNT_OUTPUT%% *}'.\n"
+else
+  printf "\n\t## There is no remote file location mounted at '${REMOTE}'. ##\n\n"
+  if [ ! -d $REMOTE ] # check whether prospective mount location exists
+  then
+    printf "\t## Mounting cannot occur because prospective mounting location '$REMOTE' does not exist. ## \n"
+  exit 1
+  fi
+  printf "Please complete authentication in order to mount remote file location at '${REMOTE}'.\n"
+  $SSHFS_COMMAND
+fi
+
+# create list of $TARGET_DATA files found at remote location that aren't already on the drive
+if [[ $(ls $REMOTE/$TARGET_DATA_SUBDIR_PATH | grep m64*) || $(ls $REMOTE/$TARGET_DATA_SUBDIR_PATH | grep m54*) ]]
+then
+  REMOTE_TARGET_DATA_PATHS=( "$(ls -d $REMOTE/$TARGET_DATA_SUBDIR_PATH/m64*)" "$(ls -d $REMOTE/$TARGET_DATA_SUBDIR_PATH/m54*)" )
+else
+  printf "\n\t## '$REMOTE/$TARGET_DATA_SUBDIR_PATH' contains no $TARGET_DATA files. ##\n\n"
+  exit 0
+fi
+if [[ -d $DRIVE/m64* || -d $DRIVE/m54* ]]
+then
+  DRIVE_TARET_DATA_PATHS=( "$(ls -d $DRIVE/m64*)" "$(ls -d $DRIVE/m54*)" )
+else
+  echo "$DRIVE contains no $TARGET_DATA files."
+fi
+TARGET_DATA_TO_COPY=()
+DUPLICATES=()
+for i in ${REMOTE_TARGET_DATA_PATHS[@]}
+do
+  if [[ ! " ${DRIVE_TARET_DATA_PATHS[@]} " =~ $( basename ${i} ) ]] # if $REMOTE $TARGET_DATA "i" is not in drive movies
+  then
+    TARGET_DATA_TO_COPY+="${i} "
+  else
+    DUPLICATES+=${i}
+  fi
+done
+
+echo "Remote $TARGET_DATA files that aren't yet on drive:"
+for i in ${TARGET_DATA_TO_COPY[@]}
+do
+  echo $i
+done
+
+# determine whether there's enough space to download all files
+DF_OUTPUT=($(df --output=avail $DRIVE ))
+AVAIL_DRIVE_SPACE=$(( ${DF_OUTPUT[1]} / 1000000 )) # NOTE: df seems to give space on drive in KB
+echo "There are ${AVAIL_DRIVE_SPACE} GB of available space on $DRIVE."
+declare -i TARGET_DATA_SIZE
+
+for i in ${TARGET_DATA_TO_COPY[@]}
+do
+  [[ $( du -bs $i ) =~ ([0-9]*) ]]
+  TARGET_DATA_SIZE+=${BASH_REMATCH[1]}
+done
+TARGET_DATA_SIZE=$(( $TARGET_DATA_SIZE / 1000000000 )) # convert to gigabytes
+
+echo "Total size of $TARGET_DATA to copy is $TARGET_DATA_SIZE GB."
