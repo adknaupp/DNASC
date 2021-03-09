@@ -5,7 +5,7 @@
 
 REMOTE="/mnt/aknaupp"
 DRIVE="/mnt/e"
-TARGET_DATA="Sequel II movies"
+TARGET_DATA="Sequel II movie"
 TARGET_DATA_SUBDIR_PATH="fsl_groups/fslg_dnasc/compute"
 SSHFS_COMMAND="sshfs -o follow_symlinks aknaupp@ssh.rc.byu.edu:/fslhome/aknaupp /mnt/aknaupp" # command automatically run if no remote FS is mounted
 
@@ -55,8 +55,6 @@ fi
 if [[ -d $DRIVE/m64* || -d $DRIVE/m54* ]]
 then
   DRIVE_TARET_DATA_PATHS=( "$(ls -d $DRIVE/m64*)" "$(ls -d $DRIVE/m54*)" )
-else
-  echo "$DRIVE contains no $TARGET_DATA files."
 fi
 TARGET_DATA_TO_COPY=()
 DUPLICATES=()
@@ -70,16 +68,15 @@ do
   fi
 done
 
-echo "Remote $TARGET_DATA files that aren't yet on drive:"
+printf "\nRemote $TARGET_DATA files that aren't yet on drive:\n"
 for i in ${TARGET_DATA_TO_COPY[@]}
 do
-  echo $i
+  echo "  $( basename $i )"
 done
 
 # determine whether there's enough space to download all files
 DF_OUTPUT=($(df --output=avail $DRIVE ))
 AVAIL_DRIVE_SPACE=$(( ${DF_OUTPUT[1]} / 1000000 )) # NOTE: df seems to give space on drive in KB
-echo "There are ${AVAIL_DRIVE_SPACE} GB of available space on $DRIVE."
 declare -i TARGET_DATA_SIZE
 
 for i in ${TARGET_DATA_TO_COPY[@]}
@@ -90,3 +87,20 @@ done
 TARGET_DATA_SIZE=$(( $TARGET_DATA_SIZE / 1000000000 )) # convert to gigabytes
 
 echo "Total size of $TARGET_DATA to copy is $TARGET_DATA_SIZE GB."
+echo "There are ${AVAIL_DRIVE_SPACE} GB of available space on $DRIVE."
+
+if [[ $(( $AVAIL_DRIVE_SPACE - $TARGET_DATA_SIZE )) < 1 ]] # if difference is less than 1 GB
+then
+  printf "\n\t## Available drive space is insufficient. Exiting script. ##\n"
+else
+  echo "Although available drive space appears sufficient, please confirm that all $TARGET_DATA downloads successfully."
+fi
+
+printf "\nCopying $TARGET_DATA files to $DRIVE. If any additional messages appear, they will pertain to the successfullness of the copying jobs."
+<< COMMENT
+for i in ${TARGET_DATA_TO_COPY[@]}
+do
+  cp $i $DRIVE
+done
+COMMENT
+printf "\n\t## Copying is disabled for testing purposes. Navigate to end of script to activate. ##\n"
