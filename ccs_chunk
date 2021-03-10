@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# Chunk uses slurm's job array feature to easily generate chunked ccs jobs.
+# ccs_chunk uses slurm's job array feature to easily generate chunked ccs jobs.
 # Argument 1 is PATH/TO/INPUT.BAM/. Argument 2 specifies ccs <options> and is optional.
-# By default, ccs_chunk runs ccs with all flags. Pass ccs chunk "--basic" as arg 2 to run ccs with no flags.
+# By default, ccs_chunk runs ccs with all flags. Pass ccs_chunk "--basic" as arg 2 to run ccs with no flags.
 # Running ccs with all flags incorporates the most possible run data in output BAM.
 # Visit ccs.how for info about pacbio's ccs program.
 
