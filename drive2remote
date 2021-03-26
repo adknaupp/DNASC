@@ -1,0 +1,101 @@
+#!/bin/bash
+
+# use sshfs to upload files to a remote location.
+
+function verify_drive_mounted {
+        if [ -d $DRIVE ]
+        then
+          printf "Prepared to upload from hard drive located at ${DRIVE}.\n"
+        else
+          printf "\n\t## Nothing is mounted at ${DRIVE}, or the location does not exist. ##\n\n"
+          printf "The following mount locations exist.\n"
+          SUBDIRS=("$(ls -d /mnt/*)")
+          echo ${SUBDIRS[@]}
+          echo "WSL solution: Execute 'sudo mount -t drvfs e: /mnt/e' to mount external hard drive 'e:'. to linux subsystem."
+          exit 1
+        fi
+}
+function verify_remote_mounted {
+        MOUNT_OUTPUT=$(mount | grep $REMOTE) # check whether $REMOTE is among mounted locations
+        if [[ $MOUNT_OUTPUT ]]
+        then
+          printf "Prepared to download to remote file location via '${MOUNT_OUTPUT%% *}'.\n"
+        else
+          printf "\n\t## There is no remote file location mounted at '${REMOTE}'. ##\n\n"
+          if [ ! -d $REMOTE ] # check whether prospective mount location exists
+          then
+            printf "\t## Mounting cannot occur because prospective mounting location '$REMOTE' does not exist. ## \n"
+          exit 1
+          fi
+          printf "Please complete authentication in order to mount remote file location at '${REMOTE}'.\n"
+          $SSHFS_COMMAND
+          while [[ 1 ]]
+          do
+            MOUNT_OUTPUT=$(mount | grep $REMOTE) # check whether $REMOTE is among mounted locations
+            if [[ $MOUNT_OUTPUT ]]
+            then
+              printf "Prepared to upload from remote file location via '${MOUNT_OUTPUT%% *}'.\n"
+              break
+            else
+              printf "\t## Mounting sshfs failed. ##\n"
+              printf "To attempt mounting remote file location again, please complete authentication.\n"
+              $SSHFS_COMMAND
+            fi
+          done
+        fi
+}
+
+# modify these variables to fit your system
+REMOTE="/mnt/aknaupp"
+REMOTE_SUBDIR_PATH="/fsl_groups/fslg_dnasc/compute"
+SSHFS_COMMAND="sshfs -o follow_symlinks aknaupp@ssh.rc.byu.edu:/fslhome/aknaupp /mnt/aknaupp" # command automatically run if no remote FS is mounted
+
+echo "Enter in lower case the letter that corresponds with the drive from which you would like to upload files."
+read
+DRIVE="/mnt/${REPLY}"
+verify_drive_mounted # verify that drive is reachable
+
+verify_remote_mounted # verify remote file location is mounted
+
+# set upload destination
+echo "Enter a directory name within $REMOTE to upload files to."
+read
+DESTINATION=${REPLY}
+echo "Searching for $DESTINATION within $REMOTE$REMOTE_SUBDIR_PATH:"
+DESTINATION_PATH=$(find $REMOTE$REMOTE_SUBDIR_PATH -name $DESTINATION -print -quit 2>/dev/null)
+if [[ $DESTINATION_PATH != '' ]]
+then
+  echo "  ## Path found for $DESTINATION: $DESTINATION_PATH  ##"
+else
+  echo "  ## ERROR: $DESTINATION not found within remote file system mounted at $REMOTE. ##"
+  exit 1
+fi
+
+# create list of files to upload
+while [[ 1 ]]
+do
+  echo "Enter the name of a file you would like to upload to remote location or enter 'done' to continue:"
+  read
+  FILENAME=${REPLY}
+  if [[ $FILENAME == 'done' ]]
+  then
+    break
+  fi
+  FILEPATH=$(find $DRIVE -name $FILENAME -print -quit 2>/dev/null)
+  if [[ $FILEPATH != '' ]]
+  then
+    echo "  ## Path found for $FILENAME: $FILEPATH  ##"
+    FILES_TO_UPLOAD+="$FILEPATH "
+  else
+    echo "  ## ERROR: $FILENAME not found in $DRIVE. ##"
+  fi
+done
+
+echo "The following files will be uploaded:"
+echo ${FILES_TO_UPLOAD[@]}
+
+for file in ${FILES_TO_UPLOAD[@]}
+do
+  echo "rsync progress of:"
+  rsync --progress $file $DESTINATION_PATH
+done
